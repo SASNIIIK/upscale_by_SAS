@@ -5,14 +5,13 @@ package.domain = org.example
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 0.1
-requirements = python3, kivy, kivymd, numpy, opencv
+requirements = python3, kivy==2.3.0, kivymd==1.1.1, pillow, numpy==1.26.4, opencv
 orientation = portrait
 fullscreen = 0
 
-android.permissions = READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
+android.permissions = READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_MEDIA_IMAGES
 android.api = 33
 android.minapi = 24
-android.ndk = 25b
 android.accept_sdk_license = True
 android.enable_androidx = True
 android.archs = arm64-v8a
