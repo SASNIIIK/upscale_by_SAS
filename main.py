@@ -48,7 +48,7 @@ MDScreen:
             size_hint: 1, 0.6
             md_bg_color: 1, 1, 1, 1
             elevation: 1
-            radius: [12, 12, 12, 12]
+            radius: [16, 16, 16, 16]
             
             MDBoxLayout:
                 orientation: "vertical"
