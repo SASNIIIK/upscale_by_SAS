@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer
-          key: ${{ runner.os }}-buildozer-v3-${{ hashFiles('buildozer.spec') }}
+          key: ${{ runner.os }}-buildozer-v4-${{ hashFiles('buildozer.spec') }}
 
       - name: Сборка APK
         run: |
