@@ -1,14 +1,36 @@
 import os
-import cv2
-import numpy as np
+import traceback
+from kivy.app import App
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
 
-from kivy.lang import Builder
-from kivy.utils import platform
-from kivymd.app import MDApp
-from kivymd.uix.filemanager import MDFileManager
-from kivymd.toast import toast
+def show_error_screen(error_text):
+    class ErrorApp(App):
+        def build(self):
+            scroll = ScrollView()
+            lbl = Label(
+                text=f"ОШИБКА ЗАПУСКА:\n\n{error_text}",
+                size_hint_y=None,
+                halign="left",
+                valign="top",
+                padding=(20, 20)
+            )
+            lbl.bind(texture_size=lbl.setter('size'))
+            lbl.bind(width=lambda *x: lbl.setter('text_size')(lbl, (lbl.width, None)))
+            scroll.add_widget(lbl)
+            return scroll
+    ErrorApp().run()
 
-KV = '''
+try:
+    import cv2
+    import numpy as np
+    from kivy.lang import Builder
+    from kivy.utils import platform
+    from kivymd.app import MDApp
+    from kivymd.uix.filemanager import MDFileManager
+    from kivymd.toast import toast
+
+    KV = '''
 MDScreen:
     md_bg_color: 0.98, 0.98, 0.95, 1
 
@@ -79,112 +101,113 @@ MDScreen:
                 on_release: app.process_image()
 '''
 
+    class UpscaleApp(MDApp):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.file_manager = None
+            self.selected_path = None
 
-class UpscaleApp(MDApp):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.file_manager = None
-        self.selected_path = None
+        def build(self):
+            self.theme_cls.theme_style = "Light"
+            self.theme_cls.primary_palette = "Green"
+            return Builder.load_string(KV)
 
-    def build(self):
-        self.theme_cls.theme_style = "Light"
-        self.theme_cls.primary_palette = "Olive"
-        return Builder.load_string(KV)
+        def on_start(self):
+            if platform == "android":
+                try:
+                    from android.permissions import request_permissions, Permission
+                    request_permissions((
+                        Permission.READ_EXTERNAL_STORAGE,
+                        Permission.WRITE_EXTERNAL_STORAGE,
+                        "android.permission.READ_MEDIA_IMAGES"
+                    ))
+                except Exception as e:
+                    toast(f"Ошибка прав: {e}")
 
-    def on_start(self):
-        if platform == "android":
+            self.file_manager = MDFileManager(
+                exit_manager=self.close_file_manager,
+                select_path=self.select_path,
+                preview=False
+            )
+
+        def open_file_manager(self):
+            if platform == "android":
+                try:
+                    from android.storage import primary_external_storage_path
+                    path = primary_external_storage_path()
+                except Exception:
+                    path = "/storage/emulated/0"
+            else:
+                path = os.path.expanduser("~")
+
+            self.file_manager.show(path)
+
+        def select_path(self, path):
+            if os.path.isfile(path) and path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+                self.selected_path = path
+                self.root.ids.image_preview.source = path
+                self.root.ids.status_label.text = f"Выбран файл:\n{os.path.basename(path)}"
+                self.root.ids.process_btn.disabled = False
+            else:
+                toast("Пожалуйста, выберите изображение (.jpg, .png)")
+            self.close_file_manager()
+
+        def close_file_manager(self, *args):
+            if self.file_manager:
+                self.file_manager.close()
+
+        def process_image(self):
+            if not self.selected_path:
+                return
+
             try:
-                from android.permissions import request_permissions, Permission
-                request_permissions((
-                    Permission.READ_EXTERNAL_STORAGE,
-                    Permission.WRITE_EXTERNAL_STORAGE,
-                    "android.permission.READ_MEDIA_IMAGES"
-                ))
+                self.root.ids.status_label.text = "Обработка цвета..."
+
+                dir_name = os.path.dirname(self.selected_path)
+                file_name = os.path.basename(self.selected_path)
+                name, ext = os.path.splitext(file_name)
+                output_path = os.path.join(dir_name, f"{name}_upscaled_color{ext}")
+
+                self.upscale_image_colors(self.selected_path, output_path)
+
+                self.root.ids.status_label.text = "Готово!\nНовое разрешение x2\nСохранено рядом с оригиналом."
+                toast("Изображение успешно увеличено!")
+
+                self.root.ids.image_preview.source = output_path
+                self.root.ids.image_preview.reload()
+
             except Exception as e:
-                toast(f"Ошибка прав: {e}")
+                self.root.ids.status_label.text = f"Ошибка: {str(e)}"
+                toast("Сбой при обработке")
 
-        self.file_manager = MDFileManager(
-            exit_manager=self.close_file_manager,
-            select_path=self.select_path,
-            preview=False
-        )
+        def upscale_image_colors(self, image_path, output_path):
+            img = cv2.imread(image_path)
+            if img is None:
+                raise ValueError("Не удалось загрузить файл")
 
-    def open_file_manager(self):
-        if platform == "android":
-            try:
-                from android.storage import primary_external_storage_path
-                path = primary_external_storage_path()
-            except Exception:
-                path = "/storage/emulated/0"
-        else:
-            path = os.path.expanduser("~")
+            h, w, c = img.shape
 
-        self.file_manager.show(path)
+            upscaled = np.zeros((h * 2, w * 2, c), dtype=np.float32)
+            upscaled[::2, ::2] = img
 
-    def select_path(self, path):
-        if os.path.isfile(path) and path.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-            self.selected_path = path
-            self.root.ids.image_preview.source = path
-            self.root.ids.status_label.text = f"Выбран файл:\n{os.path.basename(path)}"
-            self.root.ids.process_btn.disabled = False
-        else:
-            toast("Пожалуйста, выберите изображение (.jpg, .png)")
-        self.close_file_manager()
+            mask = np.zeros_like(upscaled)
+            mask[::2, ::2] = 1.0
 
-    def close_file_manager(self, *args):
-        if self.file_manager:
-            self.file_manager.close()
+            kernel = np.array(((1, 1, 1), (1, 0, 1), (1, 1, 1)), dtype=np.float32)
 
-    def process_image(self):
-        if not self.selected_path:
-            return
+            neighbor_sums = cv2.filter2D(upscaled, -1, kernel, anchor=(-1, -1), borderType=cv2.BORDER_CONSTANT)
+            neighbor_counts = cv2.filter2D(mask, -1, kernel, anchor=(-1, -1), borderType=cv2.BORDER_CONSTANT)
 
-        try:
-            self.root.ids.status_label.text = "Обработка цвета..."
+            neighbor_counts[neighbor_counts == 0] = 1
+            interpolated = neighbor_sums / neighbor_counts
 
-            dir_name = os.path.dirname(self.selected_path)
-            file_name = os.path.basename(self.selected_path)
-            name, ext = os.path.splitext(file_name)
-            output_path = os.path.join(dir_name, f"{name}_upscaled_color{ext}")
+            result = np.where(mask == 1, upscaled, interpolated)
+            final_image = np.clip(result, 0, 255).astype(np.uint8)
 
-            self.upscale_image_colors(self.selected_path, output_path)
+            cv2.imwrite(output_path, final_image)
 
-            self.root.ids.status_label.text = "Готово!\nНовое разрешение x2\nСохранено рядом с оригиналом."
-            toast("Изображение успешно увеличено!")
+    if __name__ == "__main__":
+        UpscaleApp().run()
 
-            self.root.ids.image_preview.source = output_path
-            self.root.ids.image_preview.reload()
-
-        except Exception as e:
-            self.root.ids.status_label.text = f"Ошибка: {str(e)}"
-            toast("Сбой при обработке")
-
-    def upscale_image_colors(self, image_path, output_path):
-        img = cv2.imread(image_path)
-        if img is None:
-            raise ValueError("Не удалось загрузить файл")
-
-        h, w, c = img.shape
-
-        upscaled = np.zeros((h * 2, w * 2, c), dtype=np.float32)
-        upscaled[::2, ::2] = img
-
-        mask = np.zeros_like(upscaled)
-        mask[::2, ::2] = 1.0
-
-        kernel = np.array(((1, 1, 1), (1, 0, 1), (1, 1, 1)), dtype=np.float32)
-
-        neighbor_sums = cv2.filter2D(upscaled, -1, kernel, anchor=(-1, -1), borderType=cv2.BORDER_CONSTANT)
-        neighbor_counts = cv2.filter2D(mask, -1, kernel, anchor=(-1, -1), borderType=cv2.BORDER_CONSTANT)
-
-        neighbor_counts[neighbor_counts == 0] = 1
-        interpolated = neighbor_sums / neighbor_counts
-
-        result = np.where(mask == 1, upscaled, interpolated)
-        final_image = np.clip(result, 0, 255).astype(np.uint8)
-
-        cv2.imwrite(output_path, final_image)
-
-
-if __name__ == "__main__":
-    UpscaleApp().run()
+except Exception:
+    show_error_screen(traceback.format_exc())
