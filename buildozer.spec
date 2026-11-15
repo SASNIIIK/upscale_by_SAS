@@ -5,7 +5,7 @@ package.domain = org.example
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 0.1
-requirements = python3, kivy==2.3.0, kivymd==1.1.1, pillow, numpy==1.26.4, opencv
+requirements = python3, kivy, kivymd==1.1.1, pillow, numpy, opencv
 orientation = portrait
 fullscreen = 0
 
