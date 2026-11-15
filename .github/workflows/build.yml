@@ -36,11 +36,14 @@ jobs:
           pip3 install --upgrade pip
           pip3 install buildozer cython==0.29.36
 
-      - name: Кэшируем скомпилированные библиотеки
-        uses: actions/cache@v4
-        with:
-          path: .buildozer
-          key: ${{ runner.os }}-buildozer-v4-${{ hashFiles('buildozer.spec') }}
+      - name: Принудительно устанавливаем Android SDK и API 33
+        run: |
+          buildozer android update || true
+          SDKMANAGER=$(find ~/.buildozer -name "sdkmanager" | head -n 1)
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null
+            "$SDKMANAGER" "platforms;android-33" "build-tools;33.0.2"
+          fi
 
       - name: Сборка APK
         run: |
